@@ -15,12 +15,16 @@ inputs:
   command:
     description: "Terraform command to execute (plan or apply)"
     required: true
+  args:
+    description: "Additional arguments for the Terraform command"
+    required: false
+    default: ""
 
 
 runs:
   using: "composite"
   steps:
-    - run: terraform {{ inputs.command }}
+    - run: terraform {{ inputs.command }} ${{ inputs.args }}
       shell: bash
       working-directory: ${{ inputs.working_directory }}
       env:

@@ -1,0 +1,24 @@
+name: "Validate Commit"
+description: "Check commit message rules"
+
+outputs:
+  allow_apply:
+    description: "Whether apply should run"
+    value: ${{ steps.validate.outputs.allow_apply }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: pip install -r requirements.txt
+      shell: bash
+
+    - name: Validate commit
+      id: validate
+      run: python validate_commit.py
+      shell: bash
