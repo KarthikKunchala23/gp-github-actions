@@ -6,8 +6,12 @@ import sys
 # It is designed to be used in a CI/CD pipeline to automatically evaluate the impact of proposed infrastructure changes before they are applied.
 
 def analyze_plan(file_path):
+    print(f"Analyzing Terraform plan file: {file_path}")
+
     with open(file_path, "r") as f:
         plan = json.load(f)
+
+    print("Plan loaded successfully. Analyzing resource changes...")
 
     resource_changes = plan.get("resource_changes", [])
 
@@ -61,5 +65,9 @@ def analyze_plan(file_path):
         sys.exit(0)
 
 if __name__ == "__main__":
-    plan_file = os.getenv("PLAN_FILE", "plan.json")
+    if len(sys.argv) < 2:
+        print("Usage: python analyze_plan.py <plan.json>")
+        sys.exit(1)
+
+    plan_file = sys.argv[1]
     analyze_plan(plan_file)
