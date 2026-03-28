@@ -1,0 +1,28 @@
+---
+name: Terraform Action
+description: A reusable GitHub Action for Terraform operations (plan and apply)
+
+inputs:
+  working_directory:
+    description: "Directory where Terraform code is located"
+    required: true
+  environment:
+    description: "Environment to deploy (dev, staging, prod)"
+    required: true
+  aws_region:
+    description: "AWS Region to deploy to"
+    required: true
+  command:
+    description: "Terraform command to execute (plan or apply)"
+    required: true
+
+
+runs:
+  using: "composite"
+  steps:
+    - run: terraform {{ inputs.command }}
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      env:
+        TF_WORKSPACE: ${{ inputs.environment }}
+        TF_VAR_environment: ${{ inputs.environment }}
