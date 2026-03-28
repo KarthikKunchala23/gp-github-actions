@@ -24,7 +24,7 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - run: terraform {{ inputs.command }} ${{ inputs.args }}
+    - run: terraform ${{ inputs.command }} ${{ inputs.args }}
       shell: bash
       working-directory: ${{ inputs.working_directory }}
       env:
