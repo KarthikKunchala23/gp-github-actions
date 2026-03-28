@@ -1,6 +1,11 @@
 name: "Analyze Terraform Plan"
 description: "Analyze Terraform plan JSON output"
 
+inputs:
+  plan_file:
+    description: "Path to the Terraform plan file (tfplan)"
+    required: true
+
 runs:
   using: "composite"
   steps:
@@ -10,9 +15,9 @@ runs:
         python-version: '3.10'
 
     - name: Install dependencies
-      run: pip install -r requirements.txt
+      run: pip install -r $GITHUB_ACTION_PATH/requirements.txt
       shell: bash
 
     - name: Run analysis
-      run: python analyze_plan.py
+      run: python3 $GITHUB_ACTION_PATH/analyze_plan.py ${{ inputs.plan_file }}
       shell: bash

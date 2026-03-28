@@ -15,10 +15,10 @@ runs:
         python-version: '3.10'
 
     - name: Install dependencies
-      run: pip install -r requirements.txt
+      run: pip install -r $GITHUB_ACTION_PATH/requirements.txt
       shell: bash
 
     - name: Validate commit
       id: validate
-      run: python validate_commit.py
+      run: python3 $GITHUB_ACTION_PATH/validate_commit.py
       shell: bash
