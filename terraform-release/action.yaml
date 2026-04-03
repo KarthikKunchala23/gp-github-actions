@@ -17,7 +17,8 @@ runs:
         @semantic-release/github \
         @semantic-release/commit-analyzer \
         @semantic-release/release-notes-generator \
-        @semantic-release/git
+        @semantic-release/git \
+        conventional-changelog-conventionalcommits
 
     - name: Run semantic-release
       shell: bash
