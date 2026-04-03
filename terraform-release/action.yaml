@@ -1,0 +1,25 @@
+name: "Terraform Semantic Release"
+description: "Runs semantic-release for Terraform modules"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 18
+
+    - name: Install semantic-release dependencies
+      shell: bash
+      run: |
+        npm install semantic-release \
+        @semantic-release/changelog \
+        @semantic-release/github \
+        @semantic-release/commit-analyzer \
+        @semantic-release/release-notes-generator
+
+    - name: Run semantic-release
+      shell: bash
+      run: npx semantic-release
+      env:
+        GITHUB_TOKEN: ${{ env.GITHUB_TOKEN }}
