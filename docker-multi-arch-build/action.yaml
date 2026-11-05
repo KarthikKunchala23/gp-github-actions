@@ -70,7 +70,7 @@ runs:
       shell: bash
 
     - name: Set ECR Repository Policy for allowed accounts
-      if: ${{ inputs.ALLLOWED_ACCOUNTS != '' && inputs.ALLLOWED_ACCOUNTS != null }}
+      if: ${{ inputs.ALLOWED_ACCOUNTS != '' && inputs.ALLOWED_ACCOUNTS != null }}
       run: |
         IFS=',' read -ra RAW_ACCOUNTS <<< "${{ inputs.ALLOWED_ACCOUNTS }}"
         ALLOWED_ACCOUNTS_JSON=""
