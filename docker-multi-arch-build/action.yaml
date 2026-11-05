@@ -1,0 +1,176 @@
+name: "Build & Push Multiarch Image to ECR"
+description: "Resusable action to build and push multiarch Docker images to AWS ECR."
+
+inputs:
+  DOCKERFILE_PATH:
+    description: "Path of the Dockerfile to be used for building the image"
+    required: true
+  IMAGE_NAME:
+    description: "Name of the Docker image to be build"
+    required: true
+  IMAGE_TAG:
+    description: "Image Tag for the Docker image"
+    required: true
+  AWS_REGION:
+    description: "AWS REGION Name where ECR repo is located"
+    required: false
+    default: "ap-south-1"
+  TENANT:
+    description: "Tenant name to assume the IAM Role"
+    required: true
+  ECR_REGISTRY:
+    description: "ECR Registry URL where the image will be pushed"
+    required: false
+    default: "897722700244.dkr.ecr.ap-south-1.amazonaws.com"
+  ACCOUNT_ID:
+    description: "AWS Account ID used for role assumption and ECR operations"
+    required: false
+    default: "897722700244"
+  ALLOWED_ACCOUNTS:
+    description: "AWS account IDs allowed to pull images and use Lambda ECR access policy. Empty disables repo policy update"
+    required: false
+    default: ""
+  USE_LATEST_TAG:
+    description: 'If true, the image will also be tagged with "latest"'
+    required: false
+    default: false
+  DOCKER_CONTEXT_PATH:
+    description: "The context to use for the build, Default is the current Directory"
+    required: false
+    default: "."
+  PLATFORMS:
+    description: "The Taget Platforms to build the Image. Default is multi-arch"
+    required: false
+    default: "linux/amd64,linux/arm64"
+  
+runs:
+  using: composite
+  steps:
+    - name: Install AWS CLI
+      uses: KarthikKunchala23/gp-github-actions/setup/aws-cli@main
+
+    - name: Setup AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        role-to-assume: arn:aws:iam::${{ inputs.ACCOUNT_ID }}:role/${{ inputs.TENANT }}-ecr-role
+        aws-region: ${{ inputs.AWS_REGION }}
+
+    - name: Create ECR Repository if not exists
+      run: |
+        REPO_EXISTS=$(aws ecr describe-repositories --repository-names ${{ inputs.IMAGE_NAME }} --region ${{ inputs.AWS_REGION }} 2>&1 || true)
+        if echo "$REPO_EXISTS" | grep -q 'RepositoryNotFoundException'; then
+          echo "Repository ${{ inputs.IMAGE_NAME }} does not exist. Creating..."
+          aws ecr create-repository --repository-name ${{ inputs.IMAGE_NAME }} --region ${{ inputs.AWS_REGION }} || true
+        elif echo "$REPO_EXISTS" | grep -q 'AccessDeniedException'; then
+          echo "Access denied to describe repository ${{ inputs.IMAGE_NAME }}. Please check your permissions."
+          exit 1
+        else
+          echo "Repository ${{ inputs.IMAGE_NAME }} already exists."
+        fi
+      shell: bash
+
+    - name: Set ECR Repository Policy for allowed accounts
+      if: ${{ inputs.ALLLOWED_ACCOUNTS != '' && inputs.ALLLOWED_ACCOUNTS != null }}
+      run: |
+        IFS=',' read -ra RAW_ACCOUNTS <<< "${{ inputs.ALLOWED_ACCOUNTS }}"
+        ALLOWED_ACCOUNTS_JSON=""
+
+        for RAW_ACCOUNT in "${RAW_ACCOUNTS[@]}"; do
+          ACCOUNT=$(echo "$RAW_ACCOUNT" | xargs) # Trim whitespace
+          if [ -n "$ACCOUNT" ]; then
+            if [ -n "$ALLOWED_ACCOUNTS_JSON" ]; then
+              ALLOWED_ACCOUNTS_JSON+=","
+            fi
+            ALLOWED_ACCOUNTS_JSON="${ALLOWED_ACCOUNTS_JSON}\"${ACCOUNT}\""
+          fi
+        done
+
+        if [ -z "$ALLOWED_ACCOUNTS_JSON" ]; then
+          echo "No valid AWS account IDs provided in ALLOWED_ACCOUNTS. Please provide at least one valid account ID."
+          exit 1
+        fi
+
+        POLICY_JSON=$(cat <<EOF
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "AllowExternalAccounts",
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": "*"
+              },
+              "Action": [
+                "ecr:GetDownloadUrlForLayer",
+                "ecr:BatchGetImage",
+                "ecr:BatchCheckLayerAvailability",
+                "ecr:DescribeImages",
+                "ecr:ListImages"
+              ],
+              "Condition": {
+                "StringEquals": {
+                  "aws:PrincipalAccount": [${ALLOWED_ACCOUNTS_JSON}]
+                }
+              }
+            },
+            {
+              "Sid": "AllowLambdaECRAccess",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": [
+                "ecr:GetDownloadUrlForLayer",
+                "ecr:BatchGetImage",
+                "ecr:BatchCheckLayerAvailability"
+              ],
+              "Condition": {
+                "StringEquals": {
+                  "aws:PrincipalAccount": [${ALLOWED_ACCOUNTS_JSON}]
+                }
+              }
+            }
+          ]
+        }
+        EOF
+        )
+
+        aws ecr set-repository-policy \
+          --repository-name ${{ inputs.IMAGE_NAME }} \
+          --policy-text "$POLICY_JSON" \
+          --region ${{ inputs.AWS_REGION }}
+      shell: bash
+
+    - name: Login to ECR
+      run: |
+        LOGIN_PASSWORD=$(aws ecr get-login-password --region ${{ inputs.AWS_REGION }})
+        if [ -z "$LOGIN_PASSWORD" ]; then
+          echo "Failed to retrieve ECR login password. Please check your AWS credentials and permissions."
+          exit 1
+        fi
+        echo "$LOGIN_PASSWORD" | docker login --username AWS --password-stdin ${{ inputs.ECR_REGISTRY }}
+      shell: bash
+
+    - name: Set up QEMU for Multiarch Builds
+      if: contains(inputs.PLATFORMS, 'arm64')
+      uses: docker/setup-qemu-action@v2
+      with:
+        image: tonistiigi/binfmt:latest
+      
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+
+    - name: Build and Push Multiarch Docker Image
+      uses: docker/build-push-action@v5
+      with:
+        file: ${{ inputs.DOCKERFILE_PATH }}
+        context: ${{ inputs.DOCKER_CONTEXT_PATH }}
+        platforms: ${{ inputs.PLATFORMS }}
+        provenance: true
+        push: true
+        cache-from: type=registry,ref=${{ inputs.ECR_REGISTRY }}/${{ inputs.IMAGE_NAME }}:cache
+        cache-to: type=registry,ref=${{ inputs.ECR_REGISTRY }}/${{ inputs.IMAGE_NAME }}:cache,mode=max,image-manifest=true,oci-mediatypes=true
+        tags: |
+          ${{ inputs.ECR_REGISTRY }}/${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }}
+          ${{ inputs.USE_LATEST_TAG == 'true' && format('{0}/{1}:latest', inputs.ECR_REGISTRY, inputs.IMAGE_NAME) || '' }}
+

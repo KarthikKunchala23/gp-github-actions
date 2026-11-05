@@ -1,0 +1,18 @@
+name: 'AWS CLI Installation'
+description: 'Install AWS CLI when it is not already available'
+
+inputs:
+  version:
+    description: 'AWS CLI v2 version to install when a working v2 installation is unavailable'
+    required: false
+    default: '2.37.6'
+
+runs:
+  using: composite
+  steps:
+    - name: Install AWS CLI
+      env:
+        AWS_CLI_VERSION: ${{ inputs.version }}
+      run: |
+        "$GITHUB_ACTION_PATH/install.sh"
+      shell: bash
